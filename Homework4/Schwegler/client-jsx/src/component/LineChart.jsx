@@ -6,18 +6,10 @@ export default function LineChart({ selectedStock }) {
 
   useEffect(() => {
     if (!selectedStock) return;
-
-    let cancelled = false;
-
     d3.select(ref.current).selectAll("*").remove();
-
     fetch(`http://localhost:8000/stock/${selectedStock}`)
       .then((res) => res.json())
       .then((json) => {
-        if (cancelled) return;
-
-        d3.select(ref.current).selectAll("*").remove();
-
         const data = json.stock_series;
 
         data.forEach((d) => {
@@ -28,12 +20,11 @@ export default function LineChart({ selectedStock }) {
           d.Close = +d.Close;
         });
 
-        const margin = { top: 30, right: 120, bottom: 50, left: 60 };
+        const margin = { top: 30, right: 120, bottom: 65, left: 60 };
         const width = 760;
-        const height = 300;
+        const height = 315;
         const innerWidth = width - margin.left - margin.right;
         const innerHeight = height - margin.top - margin.bottom;
-
         const svg = d3
           .select(ref.current)
           .append("svg")
@@ -61,15 +52,56 @@ export default function LineChart({ selectedStock }) {
 
         const xAxis = chart
           .append("g")
-          .attr("transform", `translate(0,${innerHeight})`)
-          .call(d3.axisBottom(x));
+          .attr("transform", `translate(0,${innerHeight})`);
+
+        function formatXAxis(scale) {
+          const visibleDomain = scale.domain();
+          const visibleDays =
+            (visibleDomain[1] - visibleDomain[0]) / (1000 * 60 * 60 * 24);
+
+          let tickCount = 6;
+          let tickFormat = d3.timeFormat("%b %d");
+
+          if (visibleDays > 365) {
+            tickCount = 6;
+            tickFormat = d3.timeFormat("%b %Y");
+          } else if (visibleDays > 120) {
+            tickCount = 7;
+            tickFormat = d3.timeFormat("%b %d");
+          } else if (visibleDays > 30) {
+            tickCount = 6;
+            tickFormat = d3.timeFormat("%b %d");
+          } else {
+            tickCount = 5;
+            tickFormat = d3.timeFormat("%m/%d");
+          }
+
+          xAxis
+            .call(d3.axisBottom(scale).ticks(tickCount).tickFormat(tickFormat))
+            .selectAll("text")
+            .attr("text-anchor", "end")
+            .attr("transform", "rotate(-35)")
+            .attr("dx", "-0.5em")
+            .attr("dy", "0.3em")
+            .style("font-size", "11px");
+
+          xAxis.selectAll(".tick text").each(function (_, i) {
+            if (visibleDays < 20 && i % 2 !== 0) {
+              d3.select(this).style("display", "none");
+            } else {
+              d3.select(this).style("display", null);
+            }
+          });
+        }
+
+        formatXAxis(x);
 
         chart.append("g").call(d3.axisLeft(y));
 
         chart
           .append("text")
           .attr("x", innerWidth / 2)
-          .attr("y", innerHeight + 42)
+          .attr("y", innerHeight + 58)
           .attr("text-anchor", "middle")
           .text("Date");
 
@@ -82,7 +114,6 @@ export default function LineChart({ selectedStock }) {
           .text("Price");
 
         const keys = ["Open", "High", "Low", "Close"];
-
         const color = d3
           .scaleOrdinal()
           .domain(keys)
@@ -156,7 +187,8 @@ export default function LineChart({ selectedStock }) {
           ])
           .on("zoom", (event) => {
             const newX = event.transform.rescaleX(x);
-            xAxis.call(d3.axisBottom(newX));
+
+            formatXAxis(newX);
 
             const zoomedLine = d3
               .line()
@@ -173,15 +205,7 @@ export default function LineChart({ selectedStock }) {
           .attr("fill", "none")
           .attr("pointer-events", "all")
           .call(zoom);
-      })
-      .catch((err) => {
-        console.error("Error fetching stock data:", err);
       });
-
-    return () => {
-      cancelled = true;
-      d3.select(ref.current).selectAll("*").remove();
-    };
   }, [selectedStock]);
 
   return (
